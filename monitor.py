@@ -1,70 +1,66 @@
-from dataclasses import dataclass
-from typing import Optional
-from abc import ABC, abstractmethod
 from time import sleep
 import sys
+from dataclasses import dataclass
+from typing import List, Tuple
 
 @dataclass
-class VitalSign:
+class VitalLimits:
+    min_value: float
+    max_value: float
     name: str
-    value: float
-    min_limit: float
-    max_limit: float
 
-    def is_critical(self) -> bool:
-        return not (self.min_limit <= self.value <= self.max_limit)
+class VitalsRanges:
+    TEMPERATURE = VitalLimits(95, 102, "Temperature")
+    PULSE_RATE = VitalLimits(60, 100, "Pulse Rate")
+    SPO2 = VitalLimits(90, 100, "SPO2")
 
-class AlertHandler(ABC):
-    @abstractmethod
-    def alert(self, message: str):
-        pass
+def alert_vital(vital_name: str) -> None:
+    """Display alert message with blinking effect."""
+    print(f'{vital_name} is out of range!')
+    blink_alert()
 
-class ConsoleAlertHandler(AlertHandler):
-    def alert(self, message: str):
-        print(message)
-        self._blink_alert()
+def blink_alert() -> None:
+    """Create blinking alert effect."""
+    for _ in range(6):
+        print('\r* ', end='')
+        sys.stdout.flush()
+        sleep(1)
+        print('\r ', end='')
+        sys.stdout.flush()
+        sleep(1)
 
-    def _blink_alert(self, times: int = 6, interval: float = 1):
-        for _ in range(times):
-            print('\r* ', end='')
-            sys.stdout.flush()
-            sleep(interval)
-            print('\r ', end='')
-            sys.stdout.flush()
-            sleep(interval)
+def check_vital(value: float, limits: VitalLimits) -> bool:
+    """
+    Check if a vital sign is within its specified limits.
+    
+    Args:
+        value: The measured vital sign value
+        limits: The limits object containing min and max values
+    
+    Returns:
+        bool: True if vital is within limits, False otherwise
+    """
+    if value < limits.min_value or value > limits.max_value:
+        alert_vital(limits.name)
+        return False
+    return True
 
-class VitalsMonitor:
-    def __init__(self, alert_handler: AlertHandler):
-        self.alert_handler = alert_handler
-        self._initialize_vital_limits()
-
-    def _initialize_vital_limits(self):
-        self.vital_limits = {
-            "temperature": (95, 102),
-            "pulse_rate": (60, 100),
-            "spo2": (90, 100)
-        }
-
-    def check_vital(self, vital: VitalSign) -> bool:
-        if vital.is_critical():
-            self.alert_handler.alert(f'{vital.name} is critical!')
-            return False
-        return True
-
-    def vitals_ok(self, temperature: float, pulse_rate: float, spo2: float) -> bool:
-        vitals = [
-            VitalSign("Temperature", temperature, *self.vital_limits["temperature"]),
-            VitalSign("Pulse Rate", pulse_rate, *self.vital_limits["pulse_rate"]),
-            VitalSign("SPO2", spo2, *self.vital_limits["spo2"])
-        ]
-        
-        return all(self.check_vital(vital) for vital in vitals)
-
-# Example usage
-def main():
-    monitor = VitalsMonitor(ConsoleAlertHandler())
-    result = monitor.vitals_ok(temperature=98.6, pulse_rate=75, spo2=95)
-    print(f"All vitals OK: {result}")
-
-if __name__ == "__main__":
-    main()
+def vitals_ok(temperature: float, pulse_rate: float, spo2: float) -> bool:
+    """
+    Check if all vital signs are within normal ranges.
+    
+    Args:
+        temperature: Body temperature
+        pulse_rate: Heart rate
+        spo2: Oxygen saturation level
+    
+    Returns:
+        bool: True if all vitals are okay, False otherwise
+    """
+    vitals_checks = [
+        (temperature, VitalsRanges.TEMPERATURE),
+        (pulse_rate, VitalsRanges.PULSE_RATE),
+        (spo2, VitalsRanges.SPO2)
+    ]
+    
+    return all(check_vital(value, limits) for value, limits in vitals_checks)
