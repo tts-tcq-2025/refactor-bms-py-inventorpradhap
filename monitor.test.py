@@ -37,7 +37,6 @@ class TestVitalsMonitor(unittest.TestCase):
     @patch('monitor.alert_vital')
     def test_multiple_vitals_critical(self, mock_alert):
         self.assertFalse(vitals_ok(103, 101, 89))
-        # Will stop at first failure (temperature)
         mock_alert.assert_called_once_with('Temperature critical!')
 
 if __name__ == '__main__':
