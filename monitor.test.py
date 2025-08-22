@@ -1,48 +1,50 @@
 import unittest
-from unittest.mock import Mock
-from vitals_monitor import VitalsMonitor, VitalSign, AlertHandler
-
-class MockAlertHandler(AlertHandler):
-    def __init__(self):
-        self.alerts = []
-
-    def alert(self, message: str):
-        self.alerts.append(message)
+from unittest.mock import patch
+from monitor import vitals_ok
 
 class TestVitalsMonitor(unittest.TestCase):
-    def setUp(self):
-        self.alert_handler = MockAlertHandler()
-        self.monitor = VitalsMonitor(self.alert_handler)
+    
+    @patch('monitor.alert_vital')
+    def test_normal_vitals(self, mock_alert):
+        """Test when all vitals are normal."""
+        self.assertTrue(vitals_ok(98.6, 75, 95))
+        mock_alert.assert_not_called()
 
-    def test_normal_vitals(self):
-        result = self.monitor.vitals_ok(98.6, 75, 95)
-        self.assertTrue(result)
-        self.assertEqual(len(self.alert_handler.alerts), 0)
+    @patch('monitor.alert_vital')
+    def test_temperature_high(self, mock_alert):
+        """Test when temperature is too high."""
+        self.assertFalse(vitals_ok(103, 75, 95))
+        mock_alert.assert_called_once_with('Temperature')
 
-    def test_critical_temperature_high(self):
-        result = self.monitor.vitals_ok(103, 75, 95)
-        self.assertFalse(result)
-        self.assertIn("Temperature is critical!", self.alert_handler.alerts)
+    @patch('monitor.alert_vital')
+    def test_temperature_low(self, mock_alert):
+        """Test when temperature is too low."""
+        self.assertFalse(vitals_ok(94, 75, 95))
+        mock_alert.assert_called_once_with('Temperature')
 
-    def test_critical_temperature_low(self):
-        result = self.monitor.vitals_ok(94, 75, 95)
-        self.assertFalse(result)
-        self.assertIn("Temperature is critical!", self.alert_handler.alerts)
+    @patch('monitor.alert_vital')
+    def test_pulse_rate_high(self, mock_alert):
+        """Test when pulse rate is too high."""
+        self.assertFalse(vitals_ok(98.6, 101, 95))
+        mock_alert.assert_called_once_with('Pulse Rate')
 
-    def test_critical_pulse_rate_high(self):
-        result = self.monitor.vitals_ok(98.6, 101, 95)
-        self.assertFalse(result)
-        self.assertIn("Pulse Rate is critical!", self.alert_handler.alerts)
+    @patch('monitor.alert_vital')
+    def test_pulse_rate_low(self, mock_alert):
+        """Test when pulse rate is too low."""
+        self.assertFalse(vitals_ok(98.6, 59, 95))
+        mock_alert.assert_called_once_with('Pulse Rate')
 
-    def test_critical_pulse_rate_low(self):
-        result = self.monitor.vitals_ok(98.6, 59, 95)
-        self.assertFalse(result)
-        self.assertIn("Pulse Rate is critical!", self.alert_handler.alerts)
+    @patch('monitor.alert_vital')
+    def test_spo2_low(self, mock_alert):
+        """Test when SPO2 is too low."""
+        self.assertFalse(vitals_ok(98.6, 75, 89))
+        mock_alert.assert_called_once_with('SPO2')
 
-    def test_critical_spo2(self):
-        result = self.monitor.vitals_ok(98.6, 75, 89)
-        self.assertFalse(result)
-        self.assertIn("SPO2 is critical!", self.alert_handler.alerts)
+    @patch('monitor.alert_vital')
+    def test_multiple_vitals_out_of_range(self, mock_alert):
+        """Test when multiple vitals are out of range."""
+        self.assertFalse(vitals_ok(103, 101, 89))
+        mock_alert.assert_called_once_with('Temperature')
 
 if __name__ == '__main__':
     unittest.main()
