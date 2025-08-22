@@ -1,6 +1,6 @@
 from time import sleep
 import sys
-
+#Updated
 class VitalsLimits:
     TEMP_MIN = 95
     TEMP_MAX = 102
