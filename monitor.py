@@ -1,42 +1,47 @@
 from time import sleep
 import sys
+from typing import Dict, Any, Tuple, Optional, Callable
 
 # --- 1. Configuration / Data Structures ---
 # Define acceptable ranges for vital signs
-# This makes it easy to add new vitals or change limits
-VITAL_THRESHOLDS = {
-    "temperature": {"min": 95, "max": 102, "unit": "°F"},
+VITAL_THRESHOLDS: Dict[str, Dict[str, Any]] = {
+    "temperature": {"min": 95.0, "max": 102.0, "unit": "°F"},
     "pulseRate": {"min": 60, "max": 100, "unit": "bpm"},
-    "spo2": {"min": 90, "max": 100, "unit": "%"}, # SpO2 typically doesn't have an upper critical limit for low-risk patients
-    # Future vital signs can be added here easily:
-    # "bloodPressureSystolic": {"min": 90, "max": 120, "unit": "mmHg"},
-    # "bloodPressureDiastolic": {"min": 60, "max": 80, "unit": "mmHg"},
+    "spo2": {"min": 90, "max": 100, "unit": "%"},
 }
 
 # --- 2. I/O Functions (Side Effects) ---
-def _perform_critical_alert_animation(duration_seconds=12):
+def _perform_critical_alert_animation(duration_seconds: int = 12) -> None:
     """
     Performs a visual critical alert animation on the console.
-    This is a side effect (I/O) function.
+    CCN = 2 (1 for loop, 1 base)
     """
     print("\n!!! CRITICAL ALERT !!!")
-    animation_cycles = duration_seconds // 2 # Each cycle is 2 seconds (* then * )
-    for _ in range(animation_cycles):
+    animation_cycles = duration_seconds // 2
+    for _ in range(animation_cycles): # +1 CCN
         print('\r* ', end='')
         sys.stdout.flush()
         sleep(1)
         print('\r *', end='')
         sys.stdout.flush()
         sleep(1)
-    print("\n") # Newline after animation
+    print("\n")
 
-def _display_vital_status(vital_name, value, status_message):
+def _display_vital_status(vital_name: str, value: float, status_message: str) -> None:
     """
     Displays the status of a vital sign.
-    This is a side effect (I/O) function.
+    CCN = 1 (1 base)
     """
     print(f"{vital_name}: {value} {status_message}")
 
+def _display_critical_summary(issues: list[str]) -> None:
+    """
+    Displays a summary of critical issues.
+    CCN = 2 (1 for loop, 1 base)
+    """
+    print("\nSummary of critical issues:")
+    for issue in issues: # +1 CCN
+        print(f"- {issue}")
 
 # --- 3. Core Logic (Pure Functions) ---
 class VitalSignMonitor:
@@ -44,68 +49,80 @@ class VitalSignMonitor:
     Monitors vital signs and determines their status based on predefined thresholds.
     Encapsulates vital sign validation logic.
     """
-    def __init__(self, thresholds: dict):
-        self.thresholds = thresholds
+    def __init__(self, thresholds: Dict[str, Dict[str, Any]]):
+        self.thresholds = thresholds # CCN = 1
 
-    def _is_within_range(self, vital_name: str, value: float) -> tuple[bool, str]:
+    def _check_boundary_condition(
+        self,
+        value: float,
+        limit: Optional[float],
+        check_func: Callable[[float, float], bool], # e.g., lambda v, l: v < l
+        fail_message_template: str,
+        unit: str,
+        vital_name_for_debug: str = "" # Added for clearer message context
+    ) -> Tuple[bool, str]:
+        """
+        Generic helper to check a single boundary condition.
+        CCN = 2 (1 for 'if limit is None', 1 for 'if check_func')
+        """
+        if limit is None: # +1 CCN
+            return True, "" # No limit to check
+
+        if check_func(value, limit): # +1 CCN
+            return False, fail_message_template.format(value=value, limit=limit, unit=unit)
+        return True, ""
+
+    def _is_within_range(self, vital_name: str, value: float) -> Tuple[bool, str]:
         """
         Checks if a specific vital sign value is within its acceptable range.
-        This is a pure function.
-
-        Args:
-            vital_name: The name of the vital sign (e.g., "temperature").
-            value: The measured value of the vital sign.
-
-        Returns:
-            A tuple: (True/False if within range, corresponding message)
+        CCN = 3 (1 for 'if vital_name not in', 1 for min check, 1 for max check)
         """
-        if vital_name not in self.thresholds:
+        if vital_name not in self.thresholds: # +1 CCN
             return False, f"Unknown vital sign '{vital_name}'."
 
         config = self.thresholds[vital_name]
-        min_val = config.get("min")
-        max_val = config.get("max")
         unit = config.get("unit", "")
+        formatted_value_unit = f"({value}{unit})"
 
-        if min_val is not None and value < min_val:
-            return False, f"({value}{unit}) is too low (expected >= {min_val}{unit})."
-        if max_val is not None and value > max_val:
-            return False, f"({value}{unit}) is too high (expected <= {max_val}{unit})."
+        is_min_ok, min_msg = self._check_boundary_condition(
+            value, config.get("min"), lambda v, l: v < l,
+            f"{formatted_value_unit} is too low (expected >= {{limit}}{{unit}}).",
+            unit, vital_name
+        )
+        if not is_min_ok: # +1 CCN
+            return False, min_msg
 
-        return True, f"({value}{unit}) is OK."
+        is_max_ok, max_msg = self._check_boundary_condition(
+            value, config.get("max"), lambda v, l: v > l,
+            f"{formatted_value_unit} is too high (expected <= {{limit}}{{unit}}).",
+            unit, vital_name
+        )
+        if not is_max_ok: # +1 CCN
+            return False, max_msg
 
-    def check_vitals(self, **vitals_readings) -> bool:
+        return True, f"{formatted_value_unit} is OK."
+
+    def check_vitals(self, **vitals_readings: float) -> bool:
         """
         Checks multiple vital signs and determines if all are OK.
-        Combines pure function logic with a loop.
-
-        Args:
-            **vitals_readings: Keyword arguments where key is vital name
-                               and value is the reading (e.g., temperature=98.6).
-
-        Returns:
-            True if all vital signs are within acceptable range, False otherwise.
+        CCN = 3 (1 for loop, 1 for inner if, 1 for outer if)
         """
-        all_ok = True
-        critical_issues_found = []
+        critical_issues_found: list[str] = []
 
-        for vital_name, value in vitals_readings.items():
+        for vital_name, value in vitals_readings.items(): # +1 CCN (for loop)
             is_ok, message = self._is_within_range(vital_name, value)
-            _display_vital_status(vital_name, value, message) # Display status for each vital
+            _display_vital_status(vital_name, value, message)
 
-            if not is_ok:
-                all_ok = False
+            if not is_ok: # +1 CCN (inner if)
                 critical_issues_found.append(f"{vital_name}: {message}")
 
-        if not all_ok:
-            print("\nSummary of critical issues:")
-            for issue in critical_issues_found:
-                print(f"- {issue}")
-            _perform_critical_alert_animation() # Perform animation only if critical
+        if critical_issues_found: # +1 CCN (outer if)
+            _display_critical_summary(critical_issues_found)
+            _perform_critical_alert_animation()
             return False
-        else:
-            print("\nAll vital signs are within normal limits.")
-            return True
+
+        print("\nAll vital signs are within normal limits.")
+        return True
 
 
 # --- Usage Example / Main Execution ---
@@ -115,7 +132,7 @@ if __name__ == "__main__":
     print("--- Scenario 1: All Vitals OK ---")
     monitor.check_vitals(temperature=98.6, pulseRate=75, spo2=97)
     print("-" * 30 + "\n")
-    sleep(2) # Give a moment between scenarios
+    sleep(2)
 
     print("--- Scenario 2: Temperature Low ---")
     monitor.check_vitals(temperature=94.0, pulseRate=80, spo2=96)
@@ -148,18 +165,13 @@ if __name__ == "__main__":
     sleep(2)
 
     print("--- Scenario 8: Unknown Vital (for robustness testing) ---")
-    monitor.check_vitals(temperature=98.6, respirationRate=15, spo2=97)
+    monitor.check_vitals(temperature=98.6, respirationRate=15.0, spo2=97)
     print("-" * 30 + "\n")
     sleep(2)
 
-    # Example of changing limits dynamically (though for age, you'd likely
-    # have a Patient class or similar to manage age-based thresholds)
     print("--- Scenario 9: Changing SpO2 limit for a specific case ---")
-    # This would typically be a new VitalSignMonitor instance or updated thresholds
-    # for a patient group. For demonstration, we'll modify the global one temporarily.
-    # In a real system, you'd pass specific thresholds per patient.
     temporary_thresholds = VITAL_THRESHOLDS.copy()
-    temporary_thresholds["spo2"]["min"] = 92
+    temporary_thresholds["spo2"] = {"min": 92, "max": 100, "unit": "%"}
     monitor_for_specific_patient = VitalSignMonitor(temporary_thresholds)
     monitor_for_specific_patient.check_vitals(temperature=98.0, pulseRate=75, spo2=91)
     print("-" * 30 + "\n")
