@@ -3,29 +3,50 @@ from unittest.mock import patch
 import io
 from monitor import vitals_ok
 
-class MonitorTest(unittest.TestCase):
-    def test_not_ok_when_any_vital_out_of_range(self):
-        # Basic pass/fail checks
-        self.assertFalse(vitals_ok(99, 102, 70))   # high pulse, low spo2
-        self.assertTrue(vitals_ok(98.1, 70, 98))   # all normal
+class TestVitalsMonitor(unittest.TestCase):
 
-    def test_temperature_alert_message(self):
-        with patch('sys.stdout', new_callable=io.StringIO) as fake_out:
-            vitals_ok(103, 70, 95)  # Temperature high
-            output = fake_out.getvalue()
-            self.assertIn("Temperature critical!", output)
+    @patch('monitor.alert')  # Mock alert to silence blinking animation during tests
+    def test_temperature_high(self, mock_alert):
+        result = vitals_ok(103, 70, 95)
+        self.assertFalse(result)
+        mock_alert.assert_called_once_with('Temperature critical!')
 
-    def test_pulse_alert_message(self):
-        with patch('sys.stdout', new_callable=io.StringIO) as fake_out:
-            vitals_ok(98, 120, 95)  # Pulse high
-            output = fake_out.getvalue()
-            self.assertIn("Pulse Rate is out of range!", output)
+    @patch('monitor.alert')
+    def test_temperature_low(self, mock_alert):
+        result = vitals_ok(94, 70, 95)
+        self.assertFalse(result)
+        mock_alert.assert_called_once_with('Temperature critical!')
 
-    def test_spo2_alert_message(self):
-        with patch('sys.stdout', new_callable=io.StringIO) as fake_out:
-            vitals_ok(98, 70, 85)  # Low oxygen
-            output = fake_out.getvalue()
-            self.assertIn("Oxygen Saturation out of range!", output)
+    @patch('monitor.alert')
+    def test_pulse_rate_low(self, mock_alert):
+        result = vitals_ok(98, 50, 95)
+        self.assertFalse(result)
+        mock_alert.assert_called_once_with('Pulse Rate is out of range!')
+
+    @patch('monitor.alert')
+    def test_pulse_rate_high(self, mock_alert):
+        result = vitals_ok(98, 105, 95)
+        self.assertFalse(result)
+        mock_alert.assert_called_once_with('Pulse Rate is out of range!')
+
+    @patch('monitor.alert')
+    def test_spo2_low(self, mock_alert):
+        result = vitals_ok(98, 70, 85)
+        self.assertFalse(result)
+        mock_alert.assert_called_once_with('Oxygen Saturation out of range!')
+
+    @patch('monitor.alert')
+    def test_multiple_vitals_critical(self, mock_alert):
+        # The alert should be triggered for the first critical value found
+        result = vitals_ok(103, 105, 85)
+        self.assertFalse(result)
+        mock_alert.assert_called_once_with('Temperature critical!')
+
+    @patch('monitor.alert')
+    def test_normal_vitals(self, mock_alert):
+        result = vitals_ok(98, 70, 98)
+        self.assertTrue(result)
+        mock_alert.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
